@@ -1,6 +1,7 @@
 from flask import Flask, request, render_template_string, send_file, redirect, url_for, session
 import pandas as pd
 import io
+import os   # ✅ REQUIRED FOR RENDER
 
 app = Flask(__name__)
 app.secret_key = "manpower-render-key"   # REQUIRED on Render
@@ -117,7 +118,7 @@ function calc(i){
 def upload():
     if request.method == "POST":
         file = request.files["excel"]
-        df = pd.read_excel(file)
+        df = pd.read_excel(file)   # ✅ works after openpyxl install
 
         if "Area" not in df.columns or "Manpower" not in df.columns:
             return "Excel must contain Area and Manpower columns"
@@ -161,9 +162,13 @@ def generate():
     out_df.to_excel(buffer, index=False)
     buffer.seek(0)
 
-    return send_file(buffer, as_attachment=True,
-                     download_name="Updated_Manpower_Selected_Areas.xlsx")
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name="Updated_Manpower_Selected_Areas.xlsx"
+    )
 
-# ---------------- RUN ----------------
+# ---------------- RUN (RENDER SAFE) ----------------
 if __name__ == "__main__":
-    app.run()
+    port = int(os.environ.get("PORT", 5000))  # ✅ FIX
+    app.run(host="0.0.0.0", port=port)        # ✅ FIX
