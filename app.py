@@ -1,66 +1,29 @@
-from flask import Flask, request, render_template_string, send_file, redirect, url_for
+from flask import Flask, request, render_template_string, send_file, redirect, url_for, session
 import pandas as pd
 import io
 
 app = Flask(__name__)
+app.secret_key = "manpower-render-key"   # REQUIRED on Render
 
 # ---------------- UPLOAD PAGE ----------------
-
-UPLOAD_HTML = """
+UPLOAD_HTML = """ 
 <!DOCTYPE html>
 <html>
 <head>
     <title>Company Manpower Allocation System</title>
     <style>
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            background: #eef2f7;
-            margin: 0;
-        }
-        header {
-            background: #0a3d62;
-            color: white;
-            padding: 15px 40px;
-            font-size: 22px;
-        }
-        footer {
-            background: #0a3d62;
-            color: white;
-            padding: 10px;
-            text-align: center;
-            margin-top: 40px;
-        }
-        .container {
-            padding: 40px;
-        }
-        .upload-box {
-            background: white;
-            padding: 30px;
-            width: 50%;
-            margin: auto;
-            text-align: center;
-            border-radius: 8px;
-        }
-        button {
-            background: #1e90ff;
-            color: white;
-            border: none;
-            padding: 12px 25px;
-            margin-top: 20px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        button:hover {
-            background: #0c6cd4;
-        }
+        body { font-family: 'Segoe UI', sans-serif; background: #eef2f7; margin: 0; }
+        header { background: #0a3d62; color: white; padding: 15px 40px; font-size: 22px; }
+        footer { background: #0a3d62; color: white; padding: 10px; text-align: center; margin-top: 40px; }
+        .container { padding: 40px; }
+        .upload-box { background: white; padding: 30px; width: 50%; margin: auto; text-align: center; border-radius: 8px; }
+        button { background: #1e90ff; color: white; border: none; padding: 12px 25px; margin-top: 20px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #0c6cd4; }
     </style>
 </head>
-
 <body>
 
-<header>
-    AADHVI TECHNOLOGIES – Manpower Allocation Portal
-</header>
+<header>AADHVI TECHNOLOGIES – Manpower Allocation Portal</header>
 
 <div class="container">
 <div class="upload-box">
@@ -73,83 +36,35 @@ UPLOAD_HTML = """
 </div>
 </div>
 
-<footer>
-    © 2026 AADHVI Technologies | Manpower Planning System
-</footer>
-
+<footer>© 2026 AADHVI Technologies | Manpower Planning System</footer>
 </body>
 </html>
 """
 
 # ---------------- ALLOCATION PAGE ----------------
-
-ALLOCATE_HTML = """
+ALLOCATE_HTML = """ 
 <!DOCTYPE html>
 <html>
 <head>
     <title>Manpower Allocation</title>
     <style>
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            background: #eef2f7;
-            margin: 0;
-        }
-        header {
-            background: #0a3d62;
-            color: white;
-            padding: 15px 40px;
-            font-size: 22px;
-        }
-        footer {
-            background: #0a3d62;
-            color: white;
-            padding: 10px;
-            text-align: center;
-            margin-top: 40px;
-        }
-        .container {
-            padding: 40px;
-        }
-        table {
-            border-collapse: collapse;
-            width: 100%;
-            background: white;
-        }
-        th, td {
-            padding: 12px;
-            border: 1px solid #ccc;
-            text-align: center;
-        }
-        th {
-            background: #1e90ff;
-            color: white;
-        }
-        input[type=number] {
-            width: 70px;
-        }
-        button {
-            background: #1e90ff;
-            color: white;
-            border: none;
-            padding: 12px 25px;
-            margin-top: 20px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        button:hover {
-            background: #0c6cd4;
-        }
+        body { font-family: 'Segoe UI', sans-serif; background: #eef2f7; margin: 0; }
+        header { background: #0a3d62; color: white; padding: 15px 40px; font-size: 22px; }
+        footer { background: #0a3d62; color: white; padding: 10px; text-align: center; margin-top: 40px; }
+        .container { padding: 40px; }
+        table { border-collapse: collapse; width: 100%; background: white; }
+        th, td { padding: 12px; border: 1px solid #ccc; text-align: center; }
+        th { background: #1e90ff; color: white; }
+        input[type=number] { width: 70px; }
+        button { background: #1e90ff; color: white; border: none; padding: 12px 25px; margin-top: 20px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #0c6cd4; }
     </style>
 </head>
 
 <body>
-
-<header>
-    AADHVI TECHNOLOGIES – Manpower Allocation Portal
-</header>
+<header>AADHVI TECHNOLOGIES – Manpower Allocation Portal</header>
 
 <div class="container">
-
 <form method="POST" action="/generate">
 <table>
 <tr>
@@ -182,7 +97,6 @@ ALLOCATE_HTML = """
 
 <script>
 const data = {{ data|tojson }};
-
 function calc(i){
     let percent = document.getElementsByName("percent_" + i)[0].value;
     let total = data[i].total;
@@ -190,24 +104,17 @@ function calc(i){
     document.getElementsByName("updated_" + i)[0].value = updated;
 }
 </script>
-
 </div>
 
-<footer>
-    © 2026 AADHVI Technologies | Manpower Planning System
-</footer>
-
+<footer>© 2026 AADHVI Technologies | Manpower Planning System</footer>
 </body>
 </html>
 """
-
-stored_df = None
 
 # ---------------- ROUTES ----------------
 
 @app.route("/", methods=["GET", "POST"])
 def upload():
-    global stored_df
     if request.method == "POST":
         file = request.files["excel"]
         df = pd.read_excel(file)
@@ -215,7 +122,7 @@ def upload():
         if "Area" not in df.columns or "Manpower" not in df.columns:
             return "Excel must contain Area and Manpower columns"
 
-        stored_df = df.copy()
+        session["stored_df"] = df.to_json()
         return redirect(url_for("allocate"))
 
     return render_template_string(UPLOAD_HTML)
@@ -223,18 +130,18 @@ def upload():
 
 @app.route("/allocate")
 def allocate():
-    data = [
-        {"area": r["Area"], "total": r["Manpower"]}
-        for _, r in stored_df.iterrows()
-    ]
+    if "stored_df" not in session:
+        return redirect(url_for("upload"))
+
+    stored_df = pd.read_json(session["stored_df"])
+    data = [{"area": r["Area"], "total": r["Manpower"]} for _, r in stored_df.iterrows()]
     return render_template_string(ALLOCATE_HTML, data=data)
 
 
 @app.route("/generate", methods=["POST"])
 def generate():
-    global stored_df
+    stored_df = pd.read_json(session["stored_df"])
     rows = int(request.form["rows"])
-
     output = []
 
     for i in range(rows):
@@ -250,18 +157,13 @@ def generate():
             })
 
     out_df = pd.DataFrame(output)
-
     buffer = io.BytesIO()
     out_df.to_excel(buffer, index=False)
     buffer.seek(0)
 
-    return send_file(
-        buffer,
-        as_attachment=True,
-        download_name="Updated_Manpower_Selected_Areas.xlsx"
-    )
+    return send_file(buffer, as_attachment=True,
+                     download_name="Updated_Manpower_Selected_Areas.xlsx")
 
 # ---------------- RUN ----------------
-
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run()
